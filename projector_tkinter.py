@@ -107,28 +107,29 @@ class ProjectorTkinter:
         import time
         
         # 转换坐标
+        # 注意：position存储的是 (center_x, center_y, width, height) 归一化坐标
         if hasattr(self, 'scale_x'):
             display_img_width = int(self.width * self.scale_x / self.width * self.width)
             display_img_height = int(self.height * self.scale_y / self.height * self.height)
-            x = int(position[0] * display_img_width) + self.offset_x
-            y = int(position[1] * display_img_height) + self.offset_y
+            center_x = position[0] * display_img_width + self.offset_x
+            center_y = position[1] * display_img_height + self.offset_y
             w = int(position[2] * display_img_width)
             h = int(position[3] * display_img_height)
+            
+            # 计算左上角坐标
+            x = int(center_x - w / 2)
+            y = int(center_y - h / 2)
         else:
-            x = int(position[0] * self.width)
-            y = int(position[1] * self.height)
+            center_x = position[0] * self.width
+            center_y = position[1] * self.height
             w = int(position[2] * self.width)
             h = int(position[3] * self.height)
-        
-        # 如果只高亮文字区域，缩小高亮范围
-        if highlight_text_only:
-            text_ratio = 0.65  # 文字区域占原区域的65%
-            text_w = int(w * text_ratio)
-            text_h = int(h * text_ratio)
-            text_x = x + (w - text_w) // 2
-            text_y = y + (h - text_h) // 3  # 稍微偏上，因为文字通常在书籍上部
             
-            x, y, w, h = text_x, text_y, text_w, text_h
+            # 计算左上角坐标
+            x = int(center_x - w / 2)
+            y = int(center_y - h / 2)
+        
+        # 直接使用完整的书籍区域，不缩小
         
         self.current_highlight = {
             'position': (x, y, w, h),

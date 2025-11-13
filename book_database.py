@@ -11,22 +11,22 @@ class BookDatabase:
         self.books = {
             # 上排书籍 (shelf 0)
             "rethinking users": {
-                "position": (0.2505, 0.3314, 0.0518, 0.0333),
+                "position": (0.2899, 0.3842, 0.1704, 0.1574),
                 "shelf": 0,
                 "full_name": "Rethinking Users: The Design Guide to User Ecosystem Thinking"
             },
             "design justice": {
-                "position": (0.5493, 0.3739, 0.0247, 0.1852),
+                "position": (0.5523, 0.3800, 0.0308, 0.1879),
                 "shelf": 0,
                 "full_name": "DESIGN JUSTICE COMMUNITY-LED PRACTICES TO BUILD THE WORLDS WE NEED"
             },
             "do good design": {
-                "position": (0.5271, 0.3920, 0.0149, 0.1695),
+                "position": (0.5295, 0.3897, 0.0147, 0.1649),
                 "shelf": 0,
                 "full_name": "do good design HOW DESIGNERS CAN CHANGE THE WORLD"
             },
             "the social life of information": {
-                "position": (0.34, 0.25, 0.12, 0.12),
+                "position": (0.4931, 0.3832, 0.0259, 0.1649),
                 "shelf": 0,
                 "full_name": "THE SOCIAL LIFE OF INFORMATION"
             },

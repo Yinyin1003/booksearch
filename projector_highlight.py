@@ -63,10 +63,16 @@ class ProjectorHighlight:
         import time
         
         # 转换为像素坐标
-        x = int(position[0] * self.width)
-        y = int(position[1] * self.height)
+        # 注意：position存储的是 (center_x, center_y, width, height) 归一化坐标
+        # 需要转换为左上角坐标用于绘制
+        center_x = position[0] * self.width
+        center_y = position[1] * self.height
         w = int(position[2] * self.width)
         h = int(position[3] * self.height)
+        
+        # 计算左上角坐标
+        x = int(center_x - w / 2)
+        y = int(center_y - h / 2)
         
         # 确保坐标在范围内
         x = max(0, min(x, self.width - 1))

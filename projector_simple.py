@@ -66,26 +66,29 @@ class ProjectorSimple:
             return
         
         # 转换为像素坐标
-        x = int(position[0] * self.width)
-        y = int(position[1] * self.height)
+        # 注意：position存储的是 (center_x, center_y, width, height) 归一化坐标
+        # 需要转换为左上角坐标用于绘制
+        center_x = position[0] * self.width
+        center_y = position[1] * self.height
         w = int(position[2] * self.width)
         h = int(position[3] * self.height)
         
-        # 只高亮文字区域（缩小到65%，并稍微偏上）
-        text_ratio = 0.65  # 文字区域占原区域的65%
-        text_w = int(w * text_ratio)
-        text_h = int(h * text_ratio)
-        text_x = x + (w - text_w) // 2  # 居中
-        text_y = y + (h - text_h) // 3  # 稍微偏上，因为文字通常在书籍上部
+        # 计算左上角坐标
+        x = int(center_x - w / 2)
+        y = int(center_y - h / 2)
+        
+        # 直接使用完整的书籍区域，不缩小
+        # 调试信息
+        print(f"\n📍 坐标信息:")
+        print(f"   归一化坐标: {position}")
+        print(f"   图片尺寸: {self.width}x{self.height}")
+        print(f"   高亮区域: ({x}, {y}, {w}, {h})")
         
         # 确保坐标在范围内
-        text_x = max(0, min(text_x, self.width - 1))
-        text_y = max(0, min(text_y, self.height - 1))
-        text_w = min(text_w, self.width - text_x)
-        text_h = min(text_h, self.height - text_y)
-        
-        # 使用文字区域的坐标
-        x, y, w, h = text_x, text_y, text_w, text_h
+        x = max(0, min(x, self.width - 1))
+        y = max(0, min(y, self.height - 1))
+        w = min(w, self.width - x)
+        h = min(h, self.height - y)
         
         # 创建显示图片
         frame = self.original_image.copy()
@@ -143,6 +146,7 @@ class ProjectorSimple:
         print(f"\n{'='*60}")
         print(f"📚 找到书籍: {book_name}")
         print(f"✅ 高亮图片已保存: {output_path}")
+        print(f"   高亮区域: ({x}, {y}) 尺寸: {w}x{h}")
         print(f"   请用图片查看器打开并全屏显示（按F键全屏）")
         print(f"{'='*60}\n")
         
