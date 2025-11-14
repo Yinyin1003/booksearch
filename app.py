@@ -4,6 +4,7 @@
 """
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask_cors import CORS  # 支持跨域请求（GitHub Pages 需要）
 import json
 import os
 import re
@@ -11,6 +12,15 @@ from book_database import BookDatabase
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = '.'
+
+# 启用 CORS（允许 GitHub Pages 访问 API）
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",  # 允许所有来源（生产环境可以限制为特定域名）
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # 全局变量存储当前设置
 display_settings = {

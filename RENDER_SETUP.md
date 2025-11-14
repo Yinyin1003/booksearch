@@ -24,8 +24,13 @@ pip install -r requirements.txt
 
 #### **Start Command**（启动命令）⭐ **重要**
 ```
-gunicorn app:app --bind 0.0.0.0:$PORT
+gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2 --worker-class sync
 ```
+
+**参数说明**：
+- `--timeout 120`: 超时时间 120 秒（处理图片生成等耗时操作）
+- `--workers 2`: 使用 2 个 worker 进程
+- `--worker-class sync`: 使用同步 worker
 
 **注意**：
 - `app:app` 第一个 `app` 是文件名（app.py），第二个 `app` 是 Flask 应用对象名

@@ -54,7 +54,7 @@ Render 提供免费 tier，适合小型项目。
      - **Name**: booksearch
      - **Environment**: Python 3
      - **Build Command**: `pip install -r requirements.txt`
-     - **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT` ⭐ **重要**
+     - **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2` ⭐ **重要**
    - 点击 "Create Web Service"
    - Render 会自动部署并提供 URL
 

@@ -37,6 +37,11 @@ projector_output/*
 !projector_output/.gitkeep
 output/
 
+# GitHub Pages
+# docs/ 目录需要提交，所以不忽略
+# 但如果不想提交，可以取消下面的注释
+# docs/
+
 # 环境变量
 .env
 .env.local
