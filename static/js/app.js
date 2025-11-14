@@ -42,9 +42,39 @@ async function init() {
 // 加载书籍数据
 async function loadBooks() {
     try {
-        const response = await fetch('/api/books');
-        books = await response.json();
+        // 添加时间戳防止缓存
+        const response = await fetch(`/api/books?t=${Date.now()}`);
+        const newBooks = await response.json();
+        console.log('加载书籍数据:', newBooks);
+        
+        // 更新书籍数据
+        books = newBooks;
         renderBookList();
+        
+        // 如果当前有选中的书籍，更新编辑面板
+        if (currentBook && books[currentBook]) {
+            const book = books[currentBook];
+            // 更新本地的 points 数组
+            if (book.points && Array.isArray(book.points) && book.points.length === 4) {
+                points = book.points.map(p => {
+                    if (Array.isArray(p)) {
+                        return [p[0], p[1]];
+                    } else {
+                        return [p[0], p[1]];
+                    }
+                });
+                console.log('更新本地四点数据:', points);
+            }
+            updateEditorUI();
+        }
+        
+        // 重新绘制
+        if (imageLoaded) {
+            setTimeout(() => {
+                resizeCanvas();
+                drawBooks();
+            }, 100);
+        }
     } catch (error) {
         console.error('加载书籍失败:', error);
     }
@@ -95,12 +125,18 @@ function selectBook(key) {
     updateEditorUI();
     
     // 确保画布已初始化后再绘制
-    if (imageLoaded) {
-        resizeCanvas();
+    if (imageLoaded && overlayCanvas.width > 0) {
+        setTimeout(() => {
+            resizeCanvas();
+            drawBooks();
+        }, 100);
     } else {
         // 如果图片还没加载，等待加载完成
         bookshelfImage.addEventListener('load', () => {
-            resizeCanvas();
+            setTimeout(() => {
+                resizeCanvas();
+                drawBooks();
+            }, 100);
         }, { once: true });
     }
 }
@@ -110,23 +146,26 @@ function updateEditorUI() {
     if (!currentBook || !books[currentBook]) return;
     
     const book = books[currentBook];
+    console.log('updateEditorUI - 当前书籍:', currentBook);
+    console.log('updateEditorUI - 书籍数据:', JSON.stringify(book, null, 2));
+    
     document.getElementById('bookKey').value = currentBook;
     document.getElementById('bookName').value = book.full_name;
     
     // 如果有四点数据，使用四点；否则从矩形位置计算四点
-    if (book.points && book.points.length === 4) {
+    if (book.points && Array.isArray(book.points) && book.points.length === 4) {
         // 使用保存的四点数据
         // 处理不同的数据格式：可能是元组列表或数组列表
         points = book.points.map(p => {
             if (Array.isArray(p)) {
-                return [p[0], p[1]];
+                return [Number(p[0]), Number(p[1])];
             } else {
                 // 如果是元组格式，转换为数组
-                return [p[0], p[1]];
+                return [Number(p[0]), Number(p[1])];
             }
         });
-        console.log('加载四点数据:', points);
-    } else {
+        console.log('✅ updateEditorUI - 从 book.points 加载四点:', points);
+    } else if (book.position && Array.isArray(book.position) && book.position.length === 4) {
         // 从矩形位置计算四个角点
         const [x, y, w, h] = book.position;
         const xMin = x - w / 2;
@@ -141,11 +180,14 @@ function updateEditorUI() {
             [xMax, yMax], // 右下
             [xMin, yMax]  // 左下
         ];
-        console.log('从矩形计算四点:', points);
+        console.log('⚠️  updateEditorUI - 从 book.position 计算四点:', points);
+    } else {
+        console.warn('❌ updateEditorUI - 书籍没有有效的 points 或 position 数据');
     }
     
     currentPointIndex = 0;
     updatePointsUI();
+    console.log('updateEditorUI - 更新后的 points:', points);
     drawBooks(); // 重新绘制
 }
 
@@ -248,8 +290,19 @@ function drawBooks() {
     Object.keys(books).forEach(key => {
         const book = books[key];
         const isSelected = key === currentBook;
-        drawBookRect(book.position, isSelected, book.full_name);
+        
+        // 优先使用四点数据绘制多边形，否则使用矩形位置
+        if (book.points && Array.isArray(book.points) && book.points.length === 4) {
+            drawBookPolygon(book.points, isSelected, book.full_name);
+        } else if (book.position && Array.isArray(book.position) && book.position.length === 4) {
+            drawBookRect(book.position, isSelected, book.full_name);
+        }
     });
+    
+    // 如果当前选中了书籍且有四点数据，绘制四个编辑点
+    if (currentBook && books[currentBook] && points && points.length === 4) {
+        drawPoints();
+    }
 }
 
 // 绘制书籍矩形（兼容旧格式）
@@ -334,7 +387,7 @@ function startDrag(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // 如果选中了书籍，检查是否点击在某个点上（用于编辑）
+    // 如果选中了书籍，只允许编辑当前书籍的点，不允许切换到其他书籍
     if (currentBook) {
         const hitRadius = 15; // 点击检测半径
         let clickedPointIndex = -1;
@@ -361,9 +414,13 @@ function startDrag(e) {
             drawBooks();
             return;
         }
+        
+        // 如果已经选中了书籍，不再自动切换到其他书籍
+        // 点击画布只用于设置当前书籍的四个点
+        return;
     }
     
-    // 检查是否点击在某个书籍矩形上
+    // 只有在没有选中书籍时，才允许通过点击选择书籍
     const clickedBook = findBookAtPosition(x, y);
     if (clickedBook) {
         selectBook(clickedBook);
@@ -398,22 +455,50 @@ function endDrag() {
     isDragging = false;
 }
 
-// 查找位置上的书籍
+// 查找位置上的书籍（仅在未选中书籍时使用）
 function findBookAtPosition(x, y) {
+    // 如果已经有选中的书籍，不允许通过点击切换
+    if (currentBook) {
+        return null;
+    }
+    
     const normalizedX = x / overlayCanvas.width;
     const normalizedY = y / overlayCanvas.height;
     
+    // 优先检查四点数据
     for (const [key, book] of Object.entries(books)) {
-        const [bx, by, bw, bh] = book.position;
-        const rectX = bx - bw / 2;
-        const rectY = by - bh / 2;
-        
-        if (normalizedX >= rectX && normalizedX <= rectX + bw &&
-            normalizedY >= rectY && normalizedY <= rectY + bh) {
-            return key;
+        if (book.points && Array.isArray(book.points) && book.points.length === 4) {
+            // 使用四点数据判断点击是否在多边形内
+            if (isPointInPolygon(normalizedX, normalizedY, book.points)) {
+                return key;
+            }
+        } else if (book.position && Array.isArray(book.position) && book.position.length === 4) {
+            // 使用矩形位置判断
+            const [bx, by, bw, bh] = book.position;
+            const rectX = bx - bw / 2;
+            const rectY = by - bh / 2;
+            
+            if (normalizedX >= rectX && normalizedX <= rectX + bw &&
+                normalizedY >= rectY && normalizedY <= rectY + bh) {
+                return key;
+            }
         }
     }
     return null;
+}
+
+// 判断点是否在多边形内（使用射线法）
+function isPointInPolygon(x, y, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i][0], yi = polygon[i][1];
+        const xj = polygon[j][0], yj = polygon[j][1];
+        
+        const intersect = ((yi > y) !== (yj > y)) && 
+                         (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
 }
 
 // 从输入框更新位置（已移除矩形模式）
@@ -488,19 +573,68 @@ async function updateBook() {
         const result = await response.json();
         
         if (response.ok && result.success) {
-            alert('书籍更新成功！\n文件已保存到 book_database.py');
             console.log('保存成功:', result);
             
-            // 重新加载书籍列表以获取最新数据
+            // 保存当前选中的书籍
+            const savedBookKey = currentBook;
+            
+            // 等待一小段时间确保文件已写入
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // 重新加载书籍列表以获取最新数据（添加缓存破坏参数确保获取最新数据）
             await loadBooks();
             
-            // 更新当前书籍的四点数据
-            if (currentBook && books[currentBook]) {
-                updateEditorUI();
+            // 恢复选中的书籍并更新显示
+            if (savedBookKey && books[savedBookKey]) {
+                currentBook = savedBookKey;
+                
+                // 从服务器数据中更新本地的 points 数组
+                const updatedBook = books[savedBookKey];
+                console.log('更新后的书籍数据:', updatedBook);
+                console.log('更新后的书籍数据 points:', updatedBook.points);
+                console.log('更新后的书籍数据 points 类型:', typeof updatedBook.points, Array.isArray(updatedBook.points));
+                
+                // 优先使用服务器返回的 points 数据，而不是让 updateEditorUI 重新计算
+                if (updatedBook.points && Array.isArray(updatedBook.points) && updatedBook.points.length === 4) {
+                    // 确保 points 格式正确（处理元组或数组格式）
+                    points = updatedBook.points.map(p => {
+                        if (Array.isArray(p)) {
+                            return [Number(p[0]), Number(p[1])];
+                        } else if (p && typeof p === 'object' && p.length === 2) {
+                            // 处理元组格式 (x, y)
+                            return [Number(p[0]), Number(p[1])];
+                        } else {
+                            return [Number(p[0]), Number(p[1])];
+                        }
+                    });
+                    console.log('✅ 从服务器获取的四点数据:', points);
+                    
+                    // 更新输入框，但不调用 updateEditorUI（避免重新计算）
+                    updatePointsUI();
+                } else {
+                    console.warn('⚠️  服务器返回的数据中没有四点数据，使用保存前的 points');
+                    // 如果没有四点数据，使用保存前的 points（用户刚设置的）
+                    // 但这种情况不应该发生，因为我们已经保存了四点
+                    updateEditorUI();
+                }
+                
+                // 更新列表高亮
+                document.querySelectorAll('.book-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.dataset.key === savedBookKey) {
+                        item.classList.add('active');
+                    }
+                });
+                
+                // 强制重新绘制（确保使用最新数据）
+                setTimeout(() => {
+                    resizeCanvas();
+                    drawBooks();
+                    console.log('✅ 重新绘制完成，当前 points:', points);
+                }, 300);
             }
             
-            // 重新绘制
-            drawBooks();
+            alert('书籍更新成功！\n文件已保存到 book_database.py');
         } else {
             console.error('保存失败:', result);
             const errorMsg = result.error || result.message || '未知错误';

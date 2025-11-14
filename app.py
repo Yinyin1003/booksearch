@@ -53,7 +53,12 @@ def serve_image():
 @app.route('/api/books', methods=['GET'])
 def get_books():
     """获取所有书籍"""
-    db = BookDatabase()
+    # 每次请求都重新加载模块，确保获取最新数据
+    import importlib
+    import book_database
+    importlib.reload(book_database)
+    
+    db = book_database.BookDatabase()
     books = {}
     for key, info in db.books.items():
         book_data = {
@@ -214,7 +219,13 @@ def update_book(book_key):
                             print(f"   旧值: {old_line.strip()}")
                             print(f"   新值: {new_line.strip()}")
                         else:
-                            print(f"ℹ️  位置未改变: {book_key}")
+                            # 即使位置值相同，如果我们在更新points，也应该标记position_found为True
+                            # 因为position字段需要存在（用于兼容性）
+                            if points_str:
+                                position_found = True
+                                print(f"ℹ️  位置值未改变，但需要保持position字段: {book_key}")
+                            else:
+                                print(f"ℹ️  位置未改变: {book_key}")
                         
                         # 如果有四点数据，添加或更新points字段
                         if points_str:
@@ -224,16 +235,25 @@ def update_book(book_key):
                                 if '"points"' in lines[k]:
                                     # 更新现有的points字段
                                     old_points_line = lines[k]
-                                    pattern_points = r'"points":\s*\[[^\]]+\]'
-                                    new_points_line = re.sub(pattern_points, f'"points": {points_str}', old_points_line)
-                                    if new_points_line != old_points_line:
-                                        lines[k] = new_points_line
-                                        points_found = True
-                                        print(f"✅ 更新四点: {book_key}")
-                                        print(f"   旧值: {old_points_line.strip()}")
-                                        print(f"   新值: {new_points_line.strip()}")
+                                    # 使用更简单可靠的正则表达式：匹配整个points列表（包括嵌套的括号）
+                                    # 使用非贪婪匹配，匹配到第一个完整的 ] 为止
+                                    pattern_points = r'"points":\s*\[.*?\]'
+                                    match = re.search(pattern_points, old_points_line)
+                                    if match:
+                                        # 找到匹配，替换整个points部分
+                                        new_points_line = re.sub(pattern_points, f'"points": {points_str}', old_points_line)
+                                        if new_points_line != old_points_line:
+                                            lines[k] = new_points_line
+                                            points_found = True
+                                            print(f"✅ 更新四点: {book_key}")
+                                            print(f"   旧值: {old_points_line.strip()}")
+                                            print(f"   新值: {new_points_line.strip()}")
+                                        else:
+                                            print(f"ℹ️  四点未改变（值相同）: {book_key}")
+                                            print(f"   旧值: {old_points_line.strip()}")
+                                            print(f"   新值应该是: {points_str}")
                                     else:
-                                        print(f"ℹ️  四点未改变: {book_key}")
+                                        print(f"⚠️  无法匹配points行: {old_points_line.strip()}")
                                     has_points = True
                                     break
                             
@@ -248,10 +268,13 @@ def update_book(book_key):
                         break
                 break
         
+        # 如果更新了位置或四点，更新内容
         if position_found or points_found:
             content = '\n'.join(lines)
+            print(f"✅ 内容已更新: position_found={position_found}, points_found={points_found}")
         else:
             print(f"⚠️  未找到位置行或四点数据未改变: {book_key}")
+            print(f"   调试: position_found={position_found}, points_found={points_found}, points_str={points_str if 'points_str' in locals() else 'N/A'}")
     
     # 更新书名
     if 'full_name' in data:
@@ -319,13 +342,21 @@ def update_book(book_key):
         if os.path.exists(db_file):
             file_size = os.path.getsize(db_file)
             print(f"✅ 文件已保存: {db_file} (大小: {file_size} 字节)")
+            
+            # 重新加载 book_database 模块，确保下次读取时使用最新数据
+            import importlib
+            import book_database
+            importlib.reload(book_database)
+            print(f"✅ 已重新加载 book_database 模块")
+            
             print(f"{'='*60}\n")
             return jsonify({
                 'success': True, 
                 'message': '书籍更新成功', 
                 'file_size': file_size,
                 'position_updated': position_updated,
-                'name_updated': name_updated
+                'name_updated': name_updated,
+                'points_updated': points_found
             })
         else:
             print(f"❌ 文件保存后不存在: {db_file}")
@@ -375,7 +406,10 @@ def settings():
 @app.route('/api/search', methods=['POST'])
 def search():
     """搜索书籍（用于语音识别）"""
-    from book_database import BookDatabase
+    # 每次搜索前都重新加载book_database，确保使用最新数据
+    import importlib
+    import book_database
+    importlib.reload(book_database)
     
     data = request.json
     query = data.get('query', '').strip()
@@ -383,16 +417,20 @@ def search():
     if not query:
         return jsonify({'success': False, 'error': '查询内容为空'}), 400
     
-    db = BookDatabase()
+    db = book_database.BookDatabase()
     book_key, book_info = db.search_book(query)
     
     if book_info:
-        return jsonify({
+        result = {
             'success': True,
             'book_key': book_key,
             'book_name': book_info['full_name'],
             'position': book_info['position']
-        })
+        }
+        # 如果有四点数据，也返回
+        if 'points' in book_info:
+            result['points'] = book_info['points']
+        return jsonify(result)
     else:
         return jsonify({
             'success': False,
@@ -402,6 +440,11 @@ def search():
 @app.route('/api/preview', methods=['POST'])
 def preview():
     """预览效果（生成高亮图片）"""
+    # 每次预览前都重新加载book_database，确保使用最新数据
+    import importlib
+    import book_database
+    importlib.reload(book_database)
+    
     from projector_simple import ProjectorSimple
     
     data = request.json
@@ -411,7 +454,7 @@ def preview():
     if not os.path.exists(image_path):
         return jsonify({'error': '图片文件不存在'}), 404
     
-    db = BookDatabase()
+    db = book_database.BookDatabase()
     if book_key not in db.books:
         return jsonify({'error': '书籍不存在'}), 404
     

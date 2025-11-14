@@ -4,38 +4,43 @@
 
 ## 部署选项
 
-### 1. Railway（推荐 - 免费且简单）
+### 1. Railway（推荐 - 免费且简单）⭐
 
-Railway 提供免费额度，部署简单。
+Railway 提供免费额度，**一键部署，无需配置**！
 
-#### 步骤：
+#### 超简单步骤：
 
-1. **准备代码**
+1. **推送到 GitHub**（如果还没有）
    ```bash
    git init
    git add .
    git commit -m "Initial commit"
+   git remote add origin https://github.com/你的用户名/booksearch.git
+   git branch -M main
+   git push -u origin main
    ```
 
-2. **推送到 GitHub**
-   - 在 GitHub 创建新仓库
-   - 推送代码：
-     ```bash
-     git remote add origin https://github.com/你的用户名/booksearch.git
-     git push -u origin main
-     ```
-
-3. **部署到 Railway**
+2. **部署到 Railway**
    - 访问 [Railway.app](https://railway.app)
-   - 使用 GitHub 账号登录
-   - 点击 "New Project" → "Deploy from GitHub repo"
-   - 选择你的仓库
-   - Railway 会自动检测 Python 项目并部署
-   - 部署完成后，Railway 会提供一个公开 URL
+   - 点击 "Start a New Project" → "Deploy from GitHub repo"
+   - 使用 GitHub 账号登录并授权
+   - 选择你的 `booksearch` 仓库
+   - **完成！** Railway 会自动：
+     - ✅ 检测 Python 项目
+     - ✅ 安装依赖（从 `requirements.txt`）
+     - ✅ 启动应用（自动检测 `app.py`）
+     - ✅ 提供公开 URL
 
-4. **配置环境变量（可选）**
-   - 在 Railway 项目设置中添加环境变量：
-     - `FLASK_DEBUG=False`（生产环境）
+3. **获取 URL**
+   - 部署完成后，Railway 会显示一个 URL
+   - 例如：`https://booksearch-production.up.railway.app`
+   - 点击即可访问！
+
+4. **配置（可选）**
+   - Railway 通常不需要任何配置
+   - 如需环境变量：Settings → Variables → 添加 `FLASK_DEBUG=False`
+
+**详细步骤**：查看 `RAILWAY_DEPLOY.md` 或 `RAILWAY_QUICK_START.md`
 
 ### 2. Render（免费选项）
 

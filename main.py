@@ -110,6 +110,13 @@ class BookSearchSystem:
         """语音识别回调函数"""
         print(f"\n识别到语音: {text}")
         
+        # 每次搜索前都重新加载book_database，确保使用最新数据
+        import importlib
+        import book_database
+        importlib.reload(book_database)
+        self.book_database = book_database.BookDatabase()
+        print("✅ 已重新加载书籍数据库")
+        
         # 搜索书籍
         book_key, book_info = self.book_database.search_book(text)
         

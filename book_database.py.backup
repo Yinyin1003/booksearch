@@ -42,8 +42,8 @@ class BookDatabase:
                 "full_name": "CONVIVIAL TOOLBOX"
             },
             "presentationzen": {
-                "position": (0.5923, 0.3657, 0.0198, 0.2188),
-                "points": [(0.5536, 0.2519), (0.5536, 0.4773), (0.5804, 0.4788), (0.5883, 0.2526)],
+                "position": (0.5933, 0.3657, 0.0238, 0.2314),
+                "points": [(0.5913, 0.2537), (0.6052, 0.2500), (0.5982, 0.4784), (0.5813, 0.4814)],
                 "shelf": 0,
                 "full_name": "presentationzen"
             },
@@ -59,13 +59,13 @@ class BookDatabase:
                 "full_name": "WHAT'S MINE IS YOURS"
             },
             "life 3.0": {
-                "position": (0.7068, 0.3653, 0.0427, 0.2121),
+                "position": (0.7078, 0.3653, 0.0466, 0.2165),
                 "shelf": 0,
                 "full_name": "LIFE 3.0: BEING HUMAN IN THE AGE OF ARTIFICIAL INTELLIGENCE"
             },
             "iterate": {
-                "position": (0.7346, 0.3650, 0.0486, 0.2247),
-                "points": [(0.6815, 0.4728), (0.7024, 0.4714), (0.6786, 0.2571), (0.6567, 0.2556)],
+                "position": (0.7341, 0.3631, 0.0536, 0.2188),
+                "points": [(0.6845, 0.2571), (0.7063, 0.2571), (0.7312, 0.4736), (0.7083, 0.4728)],
                 "shelf": 0,
                 "full_name": "ITERATE"
             },
@@ -94,34 +94,35 @@ class BookDatabase:
                 "full_name": "COFFEE LIDS"
             },
             "code as creative medium": {
-                "position": (0.2700, 0.6500, 0.1200, 0.1200),
+                "position": (0.8517, 0.7303, 0.0625, 0.0513),
                 "shelf": 1,
                 "full_name": "Code as Creative Medium"
             },
             "graphic design rants and raves": {
-                "position": (0.3900, 0.6500, 0.1200, 0.1200),
+                "position": (0.5431, 0.7249, 0.0447, 0.2058),
+                "points": [(0.8264, 0.7046), (0.8829, 0.7046), (0.8631, 0.7552), (0.8204, 0.7560)],
                 "shelf": 1,
                 "full_name": "HELLER GRAPHIC DESIGN RANTS AND RAVES"
             },
             "teaching graphic design": {
-                "position": (0.5100, 0.6500, 0.1200, 0.1200),
+                "position": (0.5665, 0.7251, 0.0476, 0.2039),
                 "shelf": 1,
                 "full_name": "TEACHING GRAPHIC DESIGN"
             },
             "thinking with type": {
-                "position": (0.6300, 0.6500, 0.1200, 0.1200),
+                "position": (0.5134, 0.7344, 0.0407, 0.1942),
                 "shelf": 1,
                 "full_name": "thinking with type A CRITICAL GUIDE"
             },
             "brand bible": {
-                "position": (0.5883, 0.7173, 0.0516, 0.2195),
-                "points": [(0.5625, 0.8270), (0.5823, 0.8263), (0.6141, 0.6075), (0.5923, 0.6083)],
+                "position": (0.5918, 0.7143, 0.0486, 0.2143),
+                "points": [(0.5099, 0.8315), (0.4931, 0.8315), (0.5169, 0.6373), (0.5337, 0.6395)],
                 "shelf": 1,
                 "full_name": "BRAND BIBLE"
             },
             "branded interactions": {
-                "position": (0.6225, 0.7020, 0.0744, 0.2344),
-                "points": [(0.6190, 0.5856), (0.6597, 0.5848), (0.6240, 0.8192), (0.5853, 0.8185)],
+                "position": (0.6245, 0.7013, 0.0685, 0.2374),
+                "points": [(0.6200, 0.5833), (0.6587, 0.5826), (0.6220, 0.8199), (0.5903, 0.8192)],
                 "shelf": 1,
                 "full_name": "BRANDED INTERACTIONS"
             },
@@ -132,12 +133,13 @@ class BookDatabase:
                 "full_name": "TYPE & IMAGE"
             },
             "typography 34": {
-                "position": (0.3400, 0.6500, 0.1200, 0.1200),
+                "position": (0.6835, 0.6908, 0.0694, 0.2582),
                 "shelf": 1,
                 "full_name": "TYPOGRAPHY 34"
             },
             "guerrilla advertising": {
-                "position": (0.4600, 0.6500, 0.1200, 0.1200),
+                "position": (0.7168, 0.6866, 0.0724, 0.2682),
+                "points": [(0.6895, 0.5625), (0.7182, 0.5617), (0.6746, 0.8170), (0.6488, 0.8199)],
                 "shelf": 1,
                 "full_name": "GUERRILLA ADVERTISING"
             },
