@@ -10,7 +10,6 @@ import os
 from voice_recognition import VoiceRecognizer
 from book_database import BookDatabase
 from projector_highlight import ProjectorHighlight
-from projector_image import ProjectorImage
 
 # 尝试导入Tkinter版本
 try:
@@ -19,6 +18,14 @@ try:
 except ImportError:
     TKINTER_AVAILABLE = False
     ProjectorTkinter = None
+
+# 尝试导入OpenCV版本（可选）
+try:
+    from projector_image import ProjectorImage
+    PROJECTOR_IMAGE_AVAILABLE = True
+except ImportError:
+    PROJECTOR_IMAGE_AVAILABLE = False
+    ProjectorImage = None
 
 # 导入简单模式（保存图片文件）
 from projector_simple import ProjectorSimple
@@ -35,7 +42,21 @@ class BookSearchSystem:
         # 初始化各个模块
         # 使用英文语音识别（因为书籍名称是英文）
         self.voice_recognizer = VoiceRecognizer(language='en-US')
-        self.book_database = BookDatabase()
+        
+        # 重新加载book_database模块，确保读取最新数据
+        import book_database
+        import importlib
+        importlib.reload(book_database)
+        self.book_database = book_database.BookDatabase()
+        
+        # 调试：显示加载的位置信息
+        print("\n📚 数据库加载信息:")
+        all_books = self.book_database.get_all_books()
+        print(f"   共加载 {len(all_books)} 本书")
+        # 显示前3本书的位置作为示例
+        for i, (key, info) in enumerate(list(all_books.items())[:3], 1):
+            print(f"   {i}. {key}: {info['position']}")
+        print()
         
         # 选择显示模式
         if image_path and os.path.exists(image_path):
@@ -60,17 +81,17 @@ class BookSearchSystem:
                         print("✅ 使用Tkinter显示模式")
                     except Exception as e:
                         print(f"⚠️  Tkinter初始化失败: {e}")
-                        print("   降级到OpenCV模式...")
-                        self.projector = ProjectorImage(image_path=image_path, width=1920, height=1080, fullscreen=True)
+                        print("   降级到简单模式...")
+                        self.projector = ProjectorSimple(image_path=image_path)
                         self.use_image_mode = True
                         self.use_tkinter = False
-                        self.use_simple_mode = False
+                        self.use_simple_mode = True
                 else:
-                    # 使用OpenCV模式
-                    self.projector = ProjectorImage(image_path=image_path, width=1920, height=1080, fullscreen=True)
+                    # 使用简单模式（推荐）
+                    self.projector = ProjectorSimple(image_path=image_path)
                     self.use_image_mode = True
                     self.use_tkinter = False
-                    self.use_simple_mode = False
+                    self.use_simple_mode = True
         else:
             print("🖥️  使用普通显示模式")
             # 默认不全屏，避免阻塞界面（如需全屏，设置 fullscreen=True）
@@ -97,15 +118,25 @@ class BookSearchSystem:
             print(f"   匹配关键词: {book_key}")
             shelf_name = "上排" if book_info['shelf'] == 0 else "下排"
             print(f"📍 位置: {shelf_name}, 坐标: {book_info['position']}")
+            print(f"   从数据库读取的位置: {self.book_database.books.get(book_key, {}).get('position', '未找到')}")
             
             # 语音反馈
-            self.voice_recognizer.speak(f"找到书籍：{book_info['full_name']}")
+            self.voice_recognizer.speak(f"Found book: {book_info['full_name']}")
             
-            # 高亮显示
-            self.projector.highlight_book(
-                book_info['position'],
-                book_info['full_name']
-            )
+            # 高亮显示（生成GIF动画并在浏览器中打开）
+            print(f"   使用位置坐标: {book_info['position']}")
+            print(f"   图片路径: {self.projector.image_path if hasattr(self.projector, 'image_path') else 'N/A'}")
+            print(f"   正在生成GIF动画...")
+            try:
+                self.projector.highlight_book(
+                    book_info['position'],
+                    book_info['full_name']
+                )
+                print(f"   ✅ GIF动画已生成并在浏览器中打开")
+            except Exception as e:
+                print(f"   ❌ 生成GIF动画时出错: {e}")
+                import traceback
+                traceback.print_exc()
         else:
             print("❌ 未找到匹配的书籍")
             print(f"   识别到的文本: '{text}'")
@@ -116,7 +147,8 @@ class BookSearchSystem:
                 print(f"   {i}. {key}")
             if len(all_books) > 5:
                 print(f"   ... 还有 {len(all_books) - 5} 本书")
-            self.voice_recognizer.speak("抱歉，未找到匹配的书籍")
+            # 语音反馈
+            self.voice_recognizer.speak("Sorry, book not found")
     
     def start(self):
         """启动系统"""
@@ -131,8 +163,8 @@ class BookSearchSystem:
         print("书籍搜索系统已启动")
         print("="*50)
         print("使用说明:")
-        print("1. 说出书名，系统会自动搜索并高亮显示")
-        print("2. 按 'q' 键退出投影显示窗口")
+        print("1. 说出书名，系统会自动搜索并显示GIF动画")
+        print("2. 找到书籍时会自动在浏览器中打开闪烁动画")
         print("3. 按 Ctrl+C 退出程序")
         print("="*50 + "\n")
         

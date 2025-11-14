@@ -93,70 +93,469 @@ class ProjectorSimple:
         # 创建显示图片
         frame = self.original_image.copy()
         
-        # 变暗其他区域
-        overlay = frame.copy()
-        overlay = cv2.addWeighted(overlay, 0.2, np.zeros_like(overlay), 0.8, 0)
+        # 将背景设为半透明黑色（60%透明度，可以看到书架）
+        # 60%透明度 = 40%不透明度，所以背景应该是原图的40%亮度
+        overlay = cv2.addWeighted(frame, 0.4, np.zeros_like(frame), 0.6, 0)
         
-        # 高亮文字区域（白色）
-        highlight_region = frame[y:y+h, x:x+w].copy()
-        white_highlight = np.ones((h, w, 3), dtype=np.uint8) * 255
-        highlight_region = cv2.addWeighted(highlight_region, 0.3, white_highlight, 0.7, 0)
-        overlay[y:y+h, x:x+w] = highlight_region
+        # 高亮区域填充白色（60%透明度，可以看到书架）
+        # 60%透明度 = 原图60% + 白色40%，这样可以看到书架
+        white_overlay = overlay.copy()
+        cv2.rectangle(white_overlay, (x, y), (x + w, y + h), (255, 255, 255), -1)
+        # 将白色矩形以60%透明度叠加（原图60% + 白色40%）
+        overlay = cv2.addWeighted(overlay, 0.6, white_overlay, 0.4, 0)
         
-        # 白色边框（只围绕文字区域）
-        cv2.rectangle(overlay, (x, y), (x + w, y + h), (255, 255, 255), 6)
-        cv2.rectangle(overlay, (x, y), (x + w, y + h), (255, 255, 255), 2)
-        
-        # 显示书名
+        # 显示书名（固定宽度400，最多3行）
         if book_name:
-            # 计算文字位置
-            text_y = max(40, y - 20)
-            text_x = x
+            # 固定背景框大小（所有书名都使用相同大小）
+            center_x = x + w // 2
+            box_width = 600  # 固定宽度：600像素
+            box_height = 180  # 固定高度：足够3行显示
+            box_x = center_x - box_width // 2
+            box_y = max(50, y - box_height - 60)  # 在白色块上方至少60像素
             
-            # 绘制文字背景
-            (text_width, text_height), baseline = cv2.getTextSize(
-                book_name, cv2.FONT_HERSHEY_SIMPLEX, 1.5, 3
-            )
+            # 确保不超出图片边界
+            box_x = max(10, min(box_x, self.width - box_width - 10))
+            box_y = max(10, min(box_y, self.height - box_height - 10))
+            
+            # 固定字体大小
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 1.5
+            thickness = 3
+            max_lines = 3
+            line_spacing = 8
+            padding = 15  # 内边距
+            
+            # 可用宽度和高度（固定背景框内的可用空间）
+            available_width = box_width - padding * 2
+            
+            # 分割长文本为多行（最多3行）
+            words = book_name.split()
+            lines = []
+            current_line = ""
+            
+            for word in words:
+                test_line = current_line + " " + word if current_line else word
+                (text_width, _), _ = cv2.getTextSize(test_line, font, font_scale, thickness)
+                
+                if text_width <= available_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                        if len(lines) >= max_lines:
+                            break
+                    current_line = word
+            
+            if current_line and len(lines) < max_lines:
+                lines.append(current_line)
+            
+            # 如果超过3行，缩小字体以适应
+            if len(lines) > max_lines:
+                # 尝试缩小字体
+                for scale in [1.2, 1.0, 0.8, 0.6]:
+                    test_thickness = max(1, int(scale * 2))
+                    test_lines = []
+                    test_current_line = ""
+                    
+                    for word in words:
+                        test_line = test_current_line + " " + word if test_current_line else word
+                        (text_width, _), _ = cv2.getTextSize(test_line, font, scale, test_thickness)
+                        
+                        if text_width <= available_width:
+                            test_current_line = test_line
+                        else:
+                            if test_current_line:
+                                test_lines.append(test_current_line)
+                                if len(test_lines) >= max_lines:
+                                    break
+                            test_current_line = word
+                    
+                    if test_current_line and len(test_lines) < max_lines:
+                        test_lines.append(test_current_line)
+                    
+                    if len(test_lines) <= max_lines:
+                        lines = test_lines
+                        font_scale = scale
+                        thickness = test_thickness
+                        break
+            
+            # 只保留前3行
+            lines = lines[:max_lines]
+            
+            # 计算每行的高度
+            line_heights = []
+            for line in lines:
+                (_, text_height), baseline = cv2.getTextSize(line, font, font_scale, thickness)
+                line_heights.append(text_height + baseline)
+            
+            # 计算总高度
+            total_text_height = sum(line_heights) + line_spacing * (len(lines) - 1)
+            
+            # 绘制固定黑色矩形框背景
             cv2.rectangle(
                 overlay,
-                (text_x - 10, text_y - text_height - 10),
-                (text_x + text_width + 10, text_y + baseline + 10),
+                (box_x, box_y),
+                (box_x + box_width, box_y + box_height),
                 (0, 0, 0),
                 -1
             )
             
-            # 绘制文字（白色）
-            cv2.putText(
-                overlay,
-                book_name,
-                (text_x, text_y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1.5,
-                (255, 255, 255),
-                3,
-                cv2.LINE_AA
+            # 计算垂直居中位置
+            start_y = box_y + padding + (box_height - padding * 2 - total_text_height) // 2
+            
+            # 绘制每一行文字（在矩形框内居中）
+            current_y = start_y
+            for i, line in enumerate(lines):
+                (text_width, text_height), baseline = cv2.getTextSize(line, font, font_scale, thickness)
+                text_x = box_x + box_width // 2 - text_width // 2  # 水平居中
+                
+                # 绘制文字（白色）
+                cv2.putText(
+                    overlay,
+                    line,
+                    (text_x, current_y + text_height),
+                    font,
+                    font_scale,
+                    (255, 255, 255),
+                    thickness,
+                    cv2.LINE_AA
+                )
+                
+                current_y += line_heights[i] + line_spacing
+        
+        # 创建GIF动画帧（闪烁+光晕效果）
+        frames = []
+        num_frames = 10  # GIF帧数
+        base_output_path = os.path.join(self.output_dir, "highlight")
+        
+        print(f"\n💾 正在创建GIF动画（{num_frames}帧，带光晕效果）...")
+        
+        # 创建多帧动画（闪烁+光晕效果）
+        for i in range(num_frames):
+            # 创建当前帧（从半透明背景开始，可以看到书架）
+            # 注意：overlay已经包含书名，所以需要从原始背景开始重新绘制
+            frame_with_glow = cv2.addWeighted(frame, 0.4, np.zeros_like(frame), 0.6, 0)
+            
+            # 计算闪烁强度（0.5到1.0之间循环）
+            cycle = (i / num_frames) * 2 * np.pi
+            intensity = 0.5 + 0.5 * np.sin(cycle)  # 0.5到1.0之间
+            
+            # 根据强度调整白色矩形的亮度
+            white_intensity = int(255 * intensity)
+            
+            # 创建光晕mask
+            glow_mask = np.zeros_like(frame_with_glow)
+            
+            # 绘制主矩形（白色填充）
+            cv2.rectangle(glow_mask, (x, y), (x + w, y + h), 
+                         (white_intensity, white_intensity, white_intensity), -1)
+            
+            # 绘制多层光晕（外层逐渐变透明）
+            glow_size = int(30 * intensity)  # 光晕大小随强度变化
+            for j in range(1, glow_size + 1, 2):
+                # 计算当前层的透明度（外层更透明）
+                alpha = max(0.1, 0.6 * (1 - j / glow_size) * intensity)
+                glow_intensity = int(white_intensity * alpha)
+                
+                # 绘制外层光晕
+                cv2.rectangle(glow_mask, 
+                             (x - j, y - j), 
+                             (x + w + j, y + h + j), 
+                             (glow_intensity, glow_intensity, glow_intensity), 
+                             2)
+            
+            # 应用高斯模糊创建柔和的光晕效果
+            blur_size = int(15 * intensity)
+            if blur_size > 0:
+                blur_size = blur_size if blur_size % 2 == 1 else blur_size + 1  # 必须是奇数
+                glow_blur = cv2.GaussianBlur(glow_mask, (blur_size, blur_size), 
+                                             sigmaX=blur_size/3, sigmaY=blur_size/3)
+            else:
+                glow_blur = glow_mask
+            
+            # 将光晕效果叠加到背景上
+            frame_with_glow = cv2.addWeighted(frame_with_glow, 1.0, glow_blur, 0.8, 0)
+            
+            # 绘制主矩形（60%透明度，可以看到书架）
+            white_overlay_frame = frame_with_glow.copy()
+            cv2.rectangle(white_overlay_frame, (x, y), (x + w, y + h), 
+                         (white_intensity, white_intensity, white_intensity), -1)
+            # 将白色矩形以60%透明度叠加（原图60% + 白色40%）
+            frame_with_glow = cv2.addWeighted(frame_with_glow, 0.6, white_overlay_frame, 0.4, 0)
+            
+            # 重新绘制书名（固定宽度400，最多3行）
+            if book_name:
+                # 固定背景框大小（所有书名都使用相同大小）
+                center_x = x + w // 2
+                box_width = 600  # 固定宽度：600像素
+                box_height = 180  # 固定高度：足够3行显示（与第一次绘制保持一致）
+                box_x = center_x - box_width // 2
+                box_y = max(50, y - box_height - 60)  # 在白色块上方至少60像素
+                
+                # 确保不超出图片边界
+                box_x = max(10, min(box_x, self.width - box_width - 10))
+                box_y = max(10, min(box_y, self.height - box_height - 10))
+                
+                # 固定字体大小
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 1.5
+                thickness = 3
+                max_lines = 3
+                line_spacing = 8
+                padding = 15  # 内边距
+                
+                # 可用宽度和高度（固定背景框内的可用空间）
+                available_width = box_width - padding * 2
+                
+                # 分割长文本为多行（最多3行）
+                words = book_name.split()
+                lines = []
+                current_line = ""
+                
+                for word in words:
+                    test_line = current_line + " " + word if current_line else word
+                    (text_width, _), _ = cv2.getTextSize(test_line, font, font_scale, thickness)
+                    
+                    if text_width <= available_width:
+                        current_line = test_line
+                    else:
+                        if current_line:
+                            lines.append(current_line)
+                            if len(lines) >= max_lines:
+                                break
+                        current_line = word
+                
+                if current_line and len(lines) < max_lines:
+                    lines.append(current_line)
+                
+                # 如果超过3行，缩小字体以适应
+                if len(lines) > max_lines:
+                    # 尝试缩小字体
+                    for scale in [1.2, 1.0, 0.8, 0.6]:
+                        test_thickness = max(1, int(scale * 2))
+                        test_lines = []
+                        test_current_line = ""
+                        
+                        for word in words:
+                            test_line = test_current_line + " " + word if test_current_line else word
+                            (text_width, _), _ = cv2.getTextSize(test_line, font, scale, test_thickness)
+                            
+                            if text_width <= available_width:
+                                test_current_line = test_line
+                            else:
+                                if test_current_line:
+                                    test_lines.append(test_current_line)
+                                    if len(test_lines) >= max_lines:
+                                        break
+                                test_current_line = word
+                        
+                        if test_current_line and len(test_lines) < max_lines:
+                            test_lines.append(test_current_line)
+                        
+                        if len(test_lines) <= max_lines:
+                            lines = test_lines
+                            font_scale = scale
+                            thickness = test_thickness
+                            break
+                
+                # 只保留前3行
+                lines = lines[:max_lines]
+                
+                # 计算每行的高度
+                line_heights = []
+                for line in lines:
+                    (_, text_height), baseline = cv2.getTextSize(line, font, font_scale, thickness)
+                    line_heights.append(text_height + baseline)
+                
+                # 计算总高度
+                total_text_height = sum(line_heights) + line_spacing * (len(lines) - 1)
+                
+                # 绘制固定黑色矩形框背景
+                cv2.rectangle(
+                    frame_with_glow,
+                    (box_x, box_y),
+                    (box_x + box_width, box_y + box_height),
+                    (0, 0, 0),
+                    -1
+                )
+                
+                # 计算垂直居中位置
+                start_y = box_y + padding + (box_height - padding * 2 - total_text_height) // 2
+                
+                # 绘制每一行文字（在矩形框内居中）
+                current_y = start_y
+                for i, line in enumerate(lines):
+                    (text_width, text_height), baseline = cv2.getTextSize(line, font, font_scale, thickness)
+                    text_x = box_x + box_width // 2 - text_width // 2  # 水平居中
+                    
+                    # 绘制文字（白色）
+                    cv2.putText(
+                        frame_with_glow,
+                        line,
+                        (text_x, current_y + text_height),
+                        font,
+                        font_scale,
+                        (255, 255, 255),
+                        thickness,
+                        cv2.LINE_AA
+                    )
+                    
+                    current_y += line_heights[i] + line_spacing
+            
+            # 转换为RGB格式（PIL需要）
+            frame_rgb = cv2.cvtColor(frame_with_glow, cv2.COLOR_BGR2RGB)
+            frames.append(frame_rgb)
+        
+        # 保存静态图片（第一帧）
+        static_output_path = base_output_path + ".jpg"
+        success_static = cv2.imwrite(static_output_path, overlay)
+        
+        # 创建GIF动画
+        gif_output_path = base_output_path + ".gif"
+        saved_files = []
+        
+        try:
+            from PIL import Image
+            
+            # 将numpy数组转换为PIL Image
+            pil_frames = [Image.fromarray(f) for f in frames]
+            
+            # 保存为GIF（循环播放，每帧100ms）
+            pil_frames[0].save(
+                gif_output_path,
+                save_all=True,
+                append_images=pil_frames[1:],
+                duration=100,  # 每帧100毫秒
+                loop=0,  # 无限循环
+                optimize=True
             )
+            
+            gif_size = os.path.getsize(gif_output_path)
+            print(f"✅ GIF动画已保存: {gif_output_path} ({gif_size} 字节)")
+            saved_files.append(gif_output_path)
+            
+        except ImportError:
+            print("⚠️  Pillow未安装，无法创建GIF动画")
+            print("   安装命令: pip install Pillow")
+            if success_static:
+                saved_files.append(static_output_path)
+        except Exception as e:
+            print(f"⚠️  创建GIF失败: {e}")
+            import traceback
+            traceback.print_exc()
+            if success_static:
+                saved_files.append(static_output_path)
         
-        frame = overlay
-        
-        # 保存图片
-        output_path = os.path.join(self.output_dir, "highlight.jpg")
-        cv2.imwrite(output_path, frame)
+        if success_static:
+            static_size = os.path.getsize(static_output_path)
+            print(f"✅ 静态图片已保存: {static_output_path} ({static_size} 字节)")
         
         print(f"\n{'='*60}")
         print(f"📚 找到书籍: {book_name}")
-        print(f"✅ 高亮图片已保存: {output_path}")
+        if saved_files:
+            print(f"✨ GIF动画已保存: {saved_files[0]}")
         print(f"   高亮区域: ({x}, {y}) 尺寸: {w}x{h}")
-        print(f"   请用图片查看器打开并全屏显示（按F键全屏）")
+        print(f"   闪烁效果: 白色矩形闪烁动画")
         print(f"{'='*60}\n")
         
-        # 尝试自动打开（macOS）
-        try:
-            import subprocess
-            subprocess.run(['open', output_path], check=False)
-            print("   已自动打开图片查看器")
-        except:
-            pass
+        # 尝试自动打开GIF（使用浏览器HTML页面，确保自动播放）
+        if saved_files and os.path.exists(saved_files[0]):
+            try:
+                import subprocess
+                import time
+                
+                open_path = saved_files[0]
+                
+                # 如果是GIF文件，创建HTML页面在浏览器中打开
+                if open_path.endswith('.gif'):
+                    # 获取绝对路径
+                    abs_path = os.path.abspath(open_path)
+                    gif_filename = os.path.basename(abs_path)
+                    
+                    # 创建HTML文件来显示GIF
+                    html_path = os.path.join(self.output_dir, "highlight_viewer.html")
+                    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Book Highlight - {book_name}</title>
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }}
+        img {{
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }}
+    </style>
+</head>
+<body>
+    <img src="{gif_filename}" alt="Book Highlight" />
+</body>
+</html>"""
+                    
+                    # 保存HTML文件
+                    with open(html_path, 'w', encoding='utf-8') as f:
+                        f.write(html_content)
+                    
+                    html_abs_path = os.path.abspath(html_path)
+                    html_url = f"file://{html_abs_path}"
+                    
+                    print(f"   正在用浏览器打开GIF动画...")
+                    
+                    # 先关闭可能已打开的浏览器窗口（可选）
+                    try:
+                        subprocess.run(['killall', 'Preview'], check=False, capture_output=True, timeout=1)
+                        time.sleep(0.1)
+                    except:
+                        pass
+                    
+                    # 尝试使用默认浏览器打开HTML
+                    result = subprocess.run(['open', html_url], check=False, capture_output=True)
+                    if result.returncode == 0:
+                        print("   ✅ 已用浏览器打开GIF动画（自动播放）")
+                    else:
+                        # 如果失败，尝试指定浏览器
+                        browsers = ['Safari', 'Google Chrome', 'Firefox', 'Microsoft Edge', 'Chromium']
+                        opened = False
+                        for browser in browsers:
+                            try:
+                                result = subprocess.run(['open', '-a', browser, html_url], 
+                                                      check=False, capture_output=True, timeout=2)
+                                if result.returncode == 0:
+                                    print(f"   ✅ 已用 {browser} 打开GIF动画（自动播放）")
+                                    opened = True
+                                    break
+                            except:
+                                continue
+                        
+                        if not opened:
+                            print(f"   ⚠️  无法用浏览器打开，请手动打开: {html_path}")
+                            print(f"   或者直接打开GIF文件: {open_path}")
+                else:
+                    # 静态图片，使用Preview打开
+                    print(f"   正在打开图片...")
+                    result = subprocess.run(['open', '-a', 'Preview', open_path], check=False, capture_output=True)
+                    if result.returncode == 0:
+                        print("   ✅ 已打开图片")
+                    else:
+                        result = subprocess.run(['open', open_path], check=False, capture_output=True)
+                        if result.returncode == 0:
+                            print("   ✅ 已打开图片")
+            except Exception as e:
+                print(f"   ⚠️  打开GIF时出错: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        success = len(saved_files) > 0
         
         self.current_highlight = {
             'position': (x, y, w, h),
