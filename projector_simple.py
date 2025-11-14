@@ -53,11 +53,12 @@ class ProjectorSimple:
             self.original_image = None
     
     def highlight_book(self, position: Tuple[float, float, float, float], 
-                       book_name: str = ""):
+                       book_name: str = "", points: list = None):
         """
         高亮显示书籍并保存图片
-        position: (x, y, width, height) 归一化坐标 (0-1)
+        position: (x, y, width, height) 归一化坐标 (0-1) - 用于兼容性
         book_name: 书籍名称
+        points: 四点定位数据 [(x1, y1), (x2, y2), (x3, y3), (x4, y4)] - 归一化坐标 (0-1)，如果提供则优先使用
         """
         import time
         
@@ -65,24 +66,51 @@ class ProjectorSimple:
             print("❌ 图片未加载")
             return
         
-        # 转换为像素坐标
-        # 注意：position存储的是 (center_x, center_y, width, height) 归一化坐标
-        # 需要转换为左上角坐标用于绘制
-        center_x = position[0] * self.width
-        center_y = position[1] * self.height
-        w = int(position[2] * self.width)
-        h = int(position[3] * self.height)
+        # 优先使用四点定位
+        use_points = points is not None and len(points) == 4
         
-        # 计算左上角坐标
-        x = int(center_x - w / 2)
-        y = int(center_y - h / 2)
+        if use_points:
+            # 使用四点定位
+            print(f"\n📍 使用四点定位:")
+            print(f"   四点数据: {points}")
+            
+            # 转换为像素坐标
+            pixel_points = []
+            for p in points:
+                px = int(p[0] * self.width)
+                py = int(p[1] * self.height)
+                pixel_points.append([px, py])
+            
+            # 计算边界框（用于书名位置）
+            xs = [p[0] for p in pixel_points]
+            ys = [p[1] for p in pixel_points]
+            x_min, x_max = min(xs), max(xs)
+            y_min, y_max = min(ys), max(ys)
+            x, y, w, h = x_min, y_min, x_max - x_min, y_max - y_min
+            
+            print(f"   图片尺寸: {self.width}x{self.height}")
+            print(f"   像素坐标: {pixel_points}")
+            print(f"   边界框: ({x}, {y}, {w}, {h})")
+        else:
+            # 使用矩形定位（兼容旧格式）
+            # 转换为像素坐标
+            # 注意：position存储的是 (center_x, center_y, width, height) 归一化坐标
+            # 需要转换为左上角坐标用于绘制
+            center_x = position[0] * self.width
+            center_y = position[1] * self.height
+            w = int(position[2] * self.width)
+            h = int(position[3] * self.height)
         
-        # 直接使用完整的书籍区域，不缩小
-        # 调试信息
-        print(f"\n📍 坐标信息:")
-        print(f"   归一化坐标: {position}")
-        print(f"   图片尺寸: {self.width}x{self.height}")
-        print(f"   高亮区域: ({x}, {y}, {w}, {h})")
+            # 计算左上角坐标
+            x = int(center_x - w / 2)
+            y = int(center_y - h / 2)
+        
+            # 调试信息
+            print(f"\n📍 使用矩形定位:")
+            print(f"   归一化坐标: {position}")
+            print(f"   图片尺寸: {self.width}x{self.height}")
+            print(f"   高亮区域: ({x}, {y}, {w}, {h})")
+            pixel_points = None
         
         # 确保坐标在范围内
         x = max(0, min(x, self.width - 1))
@@ -98,10 +126,16 @@ class ProjectorSimple:
         overlay = cv2.addWeighted(frame, 0.4, np.zeros_like(frame), 0.6, 0)
         
         # 高亮区域填充白色（60%透明度，可以看到书架）
-        # 60%透明度 = 原图60% + 白色40%，这样可以看到书架
         white_overlay = overlay.copy()
-        cv2.rectangle(white_overlay, (x, y), (x + w, y + h), (255, 255, 255), -1)
-        # 将白色矩形以60%透明度叠加（原图60% + 白色40%）
+        if use_points:
+            # 使用四点绘制多边形
+            pts = np.array(pixel_points, np.int32)
+            cv2.fillPoly(white_overlay, [pts], (255, 255, 255))
+        else:
+            # 使用矩形
+            cv2.rectangle(white_overlay, (x, y), (x + w, y + h), (255, 255, 255), -1)
+        
+        # 将白色区域以60%透明度叠加（原图60% + 白色40%）
         overlay = cv2.addWeighted(overlay, 0.6, white_overlay, 0.4, 0)
         
         # 显示书名（固定宽度400，最多3行）
@@ -246,9 +280,16 @@ class ProjectorSimple:
             # 创建光晕mask
             glow_mask = np.zeros_like(frame_with_glow)
             
-            # 绘制主矩形（白色填充）
-            cv2.rectangle(glow_mask, (x, y), (x + w, y + h), 
-                         (white_intensity, white_intensity, white_intensity), -1)
+            # 绘制主区域（白色填充）
+            if use_points:
+                # 使用四点绘制多边形
+                pts = np.array(pixel_points, np.int32)
+                cv2.fillPoly(glow_mask, [pts], 
+                           (white_intensity, white_intensity, white_intensity))
+            else:
+                # 使用矩形
+                cv2.rectangle(glow_mask, (x, y), (x + w, y + h), 
+                            (white_intensity, white_intensity, white_intensity), -1)
             
             # 绘制多层光晕（外层逐渐变透明）
             glow_size = int(30 * intensity)  # 光晕大小随强度变化
@@ -258,11 +299,57 @@ class ProjectorSimple:
                 glow_intensity = int(white_intensity * alpha)
                 
                 # 绘制外层光晕
-                cv2.rectangle(glow_mask, 
-                             (x - j, y - j), 
-                             (x + w + j, y + h + j), 
-                             (glow_intensity, glow_intensity, glow_intensity), 
-                             2)
+                if use_points:
+                    # 四点模式：沿着每条边向外扩展
+                    expanded_points = []
+                    num_points = len(pixel_points)
+                    
+                    for idx in range(num_points):
+                        # 当前点
+                        p1 = pixel_points[idx]
+                        # 下一个点
+                        p2 = pixel_points[(idx + 1) % num_points]
+                        # 前一个点
+                        p0 = pixel_points[(idx - 1) % num_points]
+                        
+                        # 计算两条边的方向向量
+                        edge1 = [p1[0] - p0[0], p1[1] - p0[1]]  # 从p0到p1
+                        edge2 = [p2[0] - p1[0], p2[1] - p1[1]]  # 从p1到p2
+                        
+                        # 归一化
+                        len1 = np.sqrt(edge1[0]**2 + edge1[1]**2) + 1e-6
+                        len2 = np.sqrt(edge2[0]**2 + edge2[1]**2) + 1e-6
+                        edge1_norm = [edge1[0] / len1, edge1[1] / len1]
+                        edge2_norm = [edge2[0] / len2, edge2[1] / len2]
+                        
+                        # 计算每条边的法向量（向外）
+                        # 对于edge1，法向量是旋转90度（顺时针）
+                        normal1 = [edge1_norm[1], -edge1_norm[0]]
+                        # 对于edge2，法向量是旋转90度（顺时针）
+                        normal2 = [edge2_norm[1], -edge2_norm[0]]
+                        
+                        # 使用两条法向量的平均方向
+                        avg_normal = [(normal1[0] + normal2[0]) / 2, (normal1[1] + normal2[1]) / 2]
+                        avg_len = np.sqrt(avg_normal[0]**2 + avg_normal[1]**2) + 1e-6
+                        avg_normal = [avg_normal[0] / avg_len, avg_normal[1] / avg_len]
+                        
+                        # 向外扩展
+                        expanded_x = int(p1[0] + avg_normal[0] * j)
+                        expanded_y = int(p1[1] + avg_normal[1] * j)
+                        expanded_points.append([expanded_x, expanded_y])
+                    
+                    # 绘制扩展后的多边形
+                    if len(expanded_points) >= 3:
+                        pts_expanded = np.array(expanded_points, np.int32)
+                        cv2.fillPoly(glow_mask, [pts_expanded], 
+                                   (glow_intensity, glow_intensity, glow_intensity))
+                else:
+                    # 矩形模式：直接扩展矩形
+                    cv2.rectangle(glow_mask, 
+                                 (x - j, y - j), 
+                                 (x + w + j, y + h + j), 
+                                 (glow_intensity, glow_intensity, glow_intensity), 
+                                 2)
             
             # 应用高斯模糊创建柔和的光晕效果
             blur_size = int(15 * intensity)
@@ -276,11 +363,18 @@ class ProjectorSimple:
             # 将光晕效果叠加到背景上
             frame_with_glow = cv2.addWeighted(frame_with_glow, 1.0, glow_blur, 0.8, 0)
             
-            # 绘制主矩形（60%透明度，可以看到书架）
+            # 绘制主区域（60%透明度，可以看到书架）
             white_overlay_frame = frame_with_glow.copy()
-            cv2.rectangle(white_overlay_frame, (x, y), (x + w, y + h), 
-                         (white_intensity, white_intensity, white_intensity), -1)
-            # 将白色矩形以60%透明度叠加（原图60% + 白色40%）
+            if use_points:
+                # 使用四点绘制多边形
+                pts = np.array(pixel_points, np.int32)
+                cv2.fillPoly(white_overlay_frame, [pts], 
+                           (white_intensity, white_intensity, white_intensity))
+            else:
+                # 使用矩形
+                cv2.rectangle(white_overlay_frame, (x, y), (x + w, y + h), 
+                             (white_intensity, white_intensity, white_intensity), -1)
+            # 将白色区域以60%透明度叠加（原图60% + 白色40%）
             frame_with_glow = cv2.addWeighted(frame_with_glow, 0.6, white_overlay_frame, 0.4, 0)
             
             # 重新绘制书名（固定宽度400，最多3行）
@@ -395,9 +489,9 @@ class ProjectorSimple:
                         (text_x, current_y + text_height),
                         font,
                         font_scale,
-                        (255, 255, 255),
+                (255, 255, 255),
                         thickness,
-                        cv2.LINE_AA
+                cv2.LINE_AA
                     )
                     
                     current_y += line_heights[i] + line_spacing

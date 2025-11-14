@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音书籍搜索预览</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gif-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            position: relative;
+        }
+
+        #gifDisplay {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .status-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .status-info {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .status-info .status {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        .status-info .status.listening {
+            color: #f44336;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .voice-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .voice-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            background: #2196f3;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.4);
+        }
+
+        .voice-btn:hover {
+            background: #1976d2;
+            transform: scale(1.1);
+        }
+
+        .voice-btn.listening {
+            background: #f44336;
+            animation: pulse 1s infinite;
+            box-shadow: 0 4px 15px rgba(244, 67, 54, 0.6);
+        }
+
+        .voice-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .recognized-text {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-size: 16px;
+            max-width: 600px;
+            text-align: center;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .recognized-text.empty {
+            color: #888;
+        }
+
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(244, 67, 54, 0.9);
+            padding: 20px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            z-index: 200;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .book-found {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(76, 175, 80, 0.9);
+            padding: 20px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            z-index: 200;
+            display: none;
+            text-align: center;
+        }
+
+        .book-found.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="status-bar">
+        <div class="status-info">
+            <span>状态: </span>
+            <span class="status" id="status">就绪</span>
+        </div>
+        <div class="status-info">
+            <span>识别到: </span>
+            <span id="recognizedText" class="recognized-text empty">等待语音输入...</span>
+        </div>
+    </div>
+
+    <div class="gif-container">
+        <img id="gifDisplay" src="" alt="书籍高亮动画" style="display: none;">
+    </div>
+
+    <div class="voice-controls">
+        <button id="voiceBtn" class="voice-btn" title="点击开始语音识别">
+            🎤
+        </button>
+        <div id="recognizedTextBottom" class="recognized-text empty">点击麦克风按钮开始语音搜索</div>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+    <div class="book-found" id="bookFound"></div>
+
+    <script>
+        // 全局变量
+        let recognition = null;
+        let isListening = false;
+        let currentGifUrl = null;
+
+        // 检查浏览器是否支持语音识别
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US'; // 使用英文，因为书籍名称是英文
+            recognition.continuous = false; // 不连续识别
+            recognition.interimResults = false; // 不显示中间结果
+
+            recognition.onstart = () => {
+                isListening = true;
+                updateUI();
+                console.log('语音识别已开始');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                console.log('识别结果:', transcript);
+                document.getElementById('recognizedText').textContent = transcript;
+                document.getElementById('recognizedText').classList.remove('empty');
+                document.getElementById('recognizedTextBottom').textContent = transcript;
+                document.getElementById('recognizedTextBottom').classList.remove('empty');
+                
+                // 搜索书籍
+                searchBook(transcript);
+            };
+
+            recognition.onerror = (event) => {
+                console.error('语音识别错误:', event.error);
+                isListening = false;
+                updateUI();
+                
+                let errorMsg = '语音识别错误';
+                if (event.error === 'no-speech') {
+                    errorMsg = '未检测到语音，请重试';
+                } else if (event.error === 'network') {
+                    errorMsg = '网络错误，请检查网络连接';
+                } else if (event.error === 'not-allowed') {
+                    errorMsg = '麦克风权限被拒绝，请允许麦克风访问';
+                }
+                
+                showError(errorMsg);
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                updateUI();
+                console.log('语音识别已结束');
+            };
+        } else {
+            console.error('浏览器不支持语音识别');
+            document.getElementById('voiceBtn').disabled = true;
+            showError('您的浏览器不支持语音识别功能，请使用 Chrome 或 Edge 浏览器');
+        }
+
+        // 更新UI状态
+        function updateUI() {
+            const btn = document.getElementById('voiceBtn');
+            const status = document.getElementById('status');
+            
+            if (isListening) {
+                btn.classList.add('listening');
+                btn.textContent = '🔴';
+                status.textContent = '正在监听...';
+                status.classList.add('listening');
+            } else {
+                btn.classList.remove('listening');
+                btn.textContent = '🎤';
+                status.textContent = '就绪';
+                status.classList.remove('listening');
+            }
+        }
+
+        // 语音按钮点击事件
+        document.getElementById('voiceBtn').addEventListener('click', () => {
+            if (!recognition) {
+                showError('浏览器不支持语音识别');
+                return;
+            }
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                // 清除之前的识别结果
+                document.getElementById('recognizedText').textContent = '等待语音输入...';
+                document.getElementById('recognizedText').classList.add('empty');
+                document.getElementById('recognizedTextBottom').textContent = '正在监听...';
+                document.getElementById('recognizedTextBottom').classList.remove('empty');
+                
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error('启动语音识别失败:', e);
+                    showError('无法启动语音识别，请重试');
+                }
+            }
+        });
+
+        // 搜索书籍
+        async function searchBook(query) {
+            try {
+                document.getElementById('status').textContent = '正在搜索...';
+                
+                // 调用后端API搜索书籍
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.book_key) {
+                    // 找到书籍，生成并显示GIF
+                    showBookFound(result.book_name);
+                    
+                    // 语音反馈：找到书籍
+                    speak(`Found book: ${result.book_name}`);
+                    
+                    await generateAndShowGif(result.book_key);
+                } else {
+                    // 未找到书籍
+                    showError('未找到匹配的书籍: ' + query);
+                    
+                    // 语音反馈：未找到
+                    speak('Sorry, book not found');
+                    
+                    hideGif();
+                }
+            } catch (error) {
+                console.error('搜索失败:', error);
+                showError('搜索失败: ' + error.message);
+                hideGif();
+            } finally {
+                document.getElementById('status').textContent = '就绪';
+            }
+        }
+
+        // 生成并显示GIF
+        async function generateAndShowGif(bookKey) {
+            try {
+                document.getElementById('status').textContent = '正在生成动画...';
+                
+                const response = await fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        book_key: bookKey,
+                        image_path: 'bookshelf.jpg'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('生成预览失败');
+                }
+
+                const result = await response.json();
+                
+                // 显示GIF
+                const gifDisplay = document.getElementById('gifDisplay');
+                const gifUrl = result.preview_url;
+                
+                // 如果是HTML文件，提取GIF路径
+                if (gifUrl.endsWith('.html')) {
+                    // HTML文件路径，需要提取GIF文件名
+                    const gifPath = gifUrl.replace('.html', '.gif');
+                    gifDisplay.src = gifPath;
+                } else {
+                    gifDisplay.src = gifUrl;
+                }
+                
+                gifDisplay.style.display = 'block';
+                currentGifUrl = gifUrl;
+                
+                console.log('GIF已显示:', gifUrl);
+            } catch (error) {
+                console.error('生成GIF失败:', error);
+                showError('生成动画失败: ' + error.message);
+            }
+        }
+
+        // 隐藏GIF
+        function hideGif() {
+            const gifDisplay = document.getElementById('gifDisplay');
+            gifDisplay.style.display = 'none';
+            gifDisplay.src = '';
+            currentGifUrl = null;
+        }
+
+        // 语音反馈函数
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                // 停止之前的语音
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; // 使用英文
+                utterance.rate = 1.0; // 语速
+                utterance.pitch = 1.0; // 音调
+                utterance.volume = 1.0; // 音量
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // 显示错误消息
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 3000);
+        }
+
+        // 显示找到书籍的消息
+        function showBookFound(bookName) {
+            const foundDiv = document.getElementById('bookFound');
+            foundDiv.textContent = `找到书籍: ${bookName}`;
+            foundDiv.classList.add('show');
+            
+            setTimeout(() => {
+                foundDiv.classList.remove('show');
+            }, 2000);
+        }
+
+        // 页面加载完成后的初始化
+        window.addEventListener('load', () => {
+            console.log('预览页面已加载');
+            document.getElementById('status').textContent = '就绪';
+        });
+    </script>
+</body>
+</html>
+

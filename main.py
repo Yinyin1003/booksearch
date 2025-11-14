@@ -21,7 +21,7 @@ except ImportError:
 
 # 尝试导入OpenCV版本（可选）
 try:
-    from projector_image import ProjectorImage
+    from projector_image import ProjectorImage  # pyright: ignore[reportMissingImports]
     PROJECTOR_IMAGE_AVAILABLE = True
 except ImportError:
     PROJECTOR_IMAGE_AVAILABLE = False
@@ -130,7 +130,8 @@ class BookSearchSystem:
             try:
                 self.projector.highlight_book(
                     book_info['position'],
-                    book_info['full_name']
+                    book_info['full_name'],
+                    points=book_info.get('points')  # 传递四点数据
                 )
                 print(f"   ✅ GIF动画已生成并在浏览器中打开")
             except Exception as e:
