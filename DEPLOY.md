@@ -54,14 +54,14 @@ Render 提供免费 tier，适合小型项目。
      - **Name**: booksearch
      - **Environment**: Python 3
      - **Build Command**: `pip install -r requirements.txt`
-     - **Start Command**: `python3 app.py`
+     - **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT` ⭐ **重要**
    - 点击 "Create Web Service"
    - Render 会自动部署并提供 URL
 
-3. **配置环境变量**
+3. **配置环境变量（可选）**
    - 在 Render Dashboard → Environment 中添加：
-     - `PORT=10000`（Render 使用 10000 端口）
      - `FLASK_DEBUG=False`
+   - **注意**：`PORT` 环境变量 Render 会自动设置，不需要手动添加
 
 ### 3. Heroku（需要信用卡验证）
 
